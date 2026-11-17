@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hộ gia đình · SmartFood AI</title>
+  <link rel="stylesheet" href="/assets/household.css">
+  <script defer src="/assets/household.js"></script>
+</head>
+<body>
+  <header><a href="/household" class="brand">SmartFood AI</a><div><span id="username"></span> <button id="logout" hidden>Đăng xuất</button></div></header>
+  <main>
+    <section id="account" hidden>
+      <h1 id="auth-title">Đăng nhập</h1>
+      <form id="auth-form" class="panel">
+        <label>Tên đăng nhập<input name="username" autocomplete="username" required pattern="[a-zA-Z0-9_.\-]{3,40}" title="3–40 chữ cái a–z, số, dấu chấm, gạch ngang hoặc gạch dưới"></label>
+        <label>Mật khẩu<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></label>
+        <button class="primary" id="auth-submit">Đăng nhập</button>
+        <button type="button" id="mode">Tạo tài khoản</button>
+      </form>
+    </section>
+    <section id="onboard" hidden>
+      <h1>Hộ gia đình của bạn</h1>
+      <div class="grid">
+        <form class="panel" id="create-form"><h2>Tạo hộ gia đình</h2><label>Tên hộ<input name="name" required maxlength="100"></label><button class="primary">Tạo hộ</button></form>
+        <form class="panel" id="join-form"><h2>Tham gia hộ</h2><label>Mã mời từ chủ hộ<input name="code" required maxlength="128" spellcheck="false"></label><button class="primary">Tham gia</button></form>
+      </div>
+    </section>
+    <section id="home" hidden>
+      <h1 id="home-name"></h1>
+      <div class="grid">
+        <section class="panel"><h2>Thành viên</h2><ul id="members"></ul></section>
+        <section class="panel" id="invites" hidden>
+          <h2>Mời thành viên</h2><p>Mỗi mã dùng một lần và có hiệu lực 24 giờ.</p>
+          <button class="primary" id="issue">Tạo mã mời</button>
+          <div id="new-code" hidden><label>Mã để chia sẻ<input id="code" readonly></label></div>
+          <ul id="codes"></ul>
+        </section>
+      </div>
+      <div class="tools"><button id="refresh">Làm mới</button><button id="leave" hidden>Rời hộ</button></div>
+    </section>
+    <p id="notice" role="status" aria-live="polite">Đang tải…</p>
+  </main>
+</body>
+</html>

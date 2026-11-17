@@ -1,5 +1,13 @@
 # SmartFood AI
 
+## W1 · Tài khoản và hộ gia đình
+
+Khởi chạy theo các lệnh Windows bên dưới, rồi mở [trang hộ gia đình](http://127.0.0.1:8000/household). Bạn có thể đăng ký, đăng nhập, tạo hộ, chia sẻ mã mời, quản lý thành viên, chuyển chủ hộ và rời hộ. [Demo hai hộ](docs/demo.md) · [Test G1](docs/evaluation.md) · [Mô hình dữ liệu](docs/data.md).
+
+Ứng dụng tự tạo SQLite tại `var/smartfood.sqlite3`. Có thể đặt biến môi trường `SMARTFOOD_DB` trỏ tới đường dẫn DB cục bộ riêng trước khi khởi động. Khởi động lại sẽ giữ dữ liệu. Thử nghiệm tự động dùng DB tạm. Dùng môi trường loopback cho demo. Trang cần được mở qua HTTP.
+
+Mã mời có hiệu lực 24 giờ, dùng một lần. Phiên đăng nhập có hiệu lực 7 ngày. Cookie là HttpOnly, SameSite=Strict và có Secure khi dùng HTTPS. API sửa dữ liệu yêu cầu header `X-SmartFood: 1`, được trang Web gửi cùng origin. Danh mục endpoint và schema có tại [OpenAPI](http://127.0.0.1:8000/docs). Chế độ thử yêu cầu trên Swagger cần gửi thêm header này.
+
 ## W1-01 · Kiểm tra kết nối Web–API
 
 FastAPI phục vụ trang Web và API từ cùng một tiến trình. Trang tiếng Việt gửi yêu cầu đến `/api/health` khi mở và khi bấm **Thử lại**.
