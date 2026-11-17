@@ -87,7 +87,7 @@ class Foundation(LiveServer):
         with self.assertRaises(sqlite3.IntegrityError), transaction(write=True) as conn:
             conn.execute("INSERT INTO memberships VALUES (?,?)",(me["id"], me["household_id"]))
         with transaction() as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],2)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],4)
             self.assertFalse(conn.execute("PRAGMA foreign_key_check").fetchall())
             self.assertFalse(conn.execute("SELECT 1 FROM households WHERE name='orphan'").fetchone())
         self.assertEqual(self.ok("/me",cookie=cookie),me)

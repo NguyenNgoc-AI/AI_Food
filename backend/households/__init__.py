@@ -5,8 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
-from .auth import current_user, digest
-from .db import transaction
+from ..auth import current_user, digest
+from ..db import transaction
 
 router = APIRouter(prefix="/api/households")
 INVITE_SECONDS = 86400

@@ -1,5 +1,9 @@
 # SmartFood AI
 
+## Backend để review
+
+[Cấu trúc 11 phần, cách chạy và các luồng kiểm tra](backend/README.md). Bản local sử dụng schema 4 và giữ các API W1.
+
 ## W1 · Tài khoản và hộ gia đình
 
 Khởi chạy theo các lệnh Windows bên dưới, rồi mở [trang hộ gia đình](http://127.0.0.1:8000/household). Bạn có thể đăng ký, đăng nhập, tạo hộ, chia sẻ mã mời, quản lý thành viên, chuyển chủ hộ và rời hộ. [Demo hai hộ](docs/demo.md) · [Test G1](docs/evaluation.md) · [Mô hình dữ liệu](docs/data.md).

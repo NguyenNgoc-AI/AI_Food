@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import auth, households
+from . import auth, households, catalog, inventory, receipts, monitoring, dietary_recipes, recommendation, meal_grocery, waste_reports
 from .db import migrate
 
 
@@ -25,6 +25,8 @@ app = FastAPI(title="SmartFood AI", lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]"])
 app.include_router(auth.router)
 app.include_router(households.router)
+for module in (catalog, inventory, receipts, monitoring, dietary_recipes, recommendation, meal_grocery, waste_reports):
+    app.include_router(module.router)
 index = Path(__file__).resolve().parents[1] / "web" / "index.html"
 app.mount("/assets", StaticFiles(directory=index.parent / "assets"), name="assets")
 

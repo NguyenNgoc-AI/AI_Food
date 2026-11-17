@@ -8,7 +8,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
-from .db import transaction
+from ..db import transaction
 
 router = APIRouter(prefix="/api")
 COOKIE = "smartfood_session"
