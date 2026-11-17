@@ -2,6 +2,10 @@
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from http.cookies import SimpleCookie
 from urllib.error import HTTPError
@@ -83,10 +87,76 @@ class Foundation(LiveServer):
         with self.assertRaises(sqlite3.IntegrityError), transaction(write=True) as conn:
             conn.execute("INSERT INTO memberships VALUES (?,?)",(me["id"], me["household_id"]))
         with transaction() as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],1)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],2)
             self.assertFalse(conn.execute("PRAGMA foreign_key_check").fetchall())
             self.assertFalse(conn.execute("SELECT 1 FROM households WHERE name='orphan'").fetchone())
         self.assertEqual(self.ok("/me",cookie=cookie),me)
+
+    def test_existing_database_upgrade(self):
+        from backend.db import ROOT
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "v1.sqlite3"
+            with sqlite3.connect(path) as db:
+                db.executescript((ROOT / "migrations/001_foundation.sql").read_text(encoding="utf-8"))
+                db.execute("INSERT INTO users VALUES (1,'existing','fixture')")
+                db.execute("PRAGMA user_version=1")
+            db.close()
+            with patch.dict("os.environ", SMARTFOOD_DB=str(path)):
+                migrate()
+                migrate()
+                with transaction() as db:
+                    self.assertEqual(db.execute("SELECT username FROM users").fetchone()[0], "existing")
+                    self.assertEqual(db.execute("SELECT COUNT(*) FROM login_attempts").fetchone()[0], 0)
+
+    def test_login_throttle_window_and_concurrency(self):
+        cookie = self.account("rate")
+        username = self.ok("/me", cookie=cookie)["username"]
+        def attempt(password):
+            return self.call("/auth/login", "POST", data={"username":username.upper(), "password":password})
+        for _ in range(9):
+            self.assertEqual(attempt("incorrect-password")[0], 401)
+        self.assertEqual(self.race(lambda:attempt("bad-password"),lambda:attempt("bad-password")), [401,429])
+        code, _, headers = attempt("integration-only-pass")
+        self.assertEqual(code, 429)
+        self.assertGreater(int(headers["Retry-After"]), 0)
+        with transaction(write=True) as db:
+            db.execute("UPDATE login_attempts SET started=0 WHERE bucket=?", ("user:" + username,))
+        self.assertEqual(attempt("integration-only-pass")[0], 200)
+
+    def test_invitation_expires_waiting_for_lock(self):
+        owner, guest = self.account("owner"), self.account("guest")
+        home = self.home(owner)
+        invite = self.invite(home, owner)
+        entered = threading.Event()
+        clock = 100
+        @contextmanager
+        def observed(write=False):
+            entered.set()
+            with transaction(write=write) as conn:
+                yield conn
+        with ThreadPoolExecutor(1) as pool, patch("backend.households.transaction", observed), \
+             patch("backend.households.time") as local_clock:
+            local_clock.time.side_effect = lambda: clock
+            with transaction(write=True) as db:
+                db.execute("UPDATE invitations SET expires_at=101 WHERE id=?", (invite["id"],))
+                result = pool.submit(self.call, "/households/join", "POST", guest, {"code":invite["code"]})
+                self.assertTrue(entered.wait(4))
+                clock = 101
+            self.assertEqual(result.result()[0], 400)
+        self.assertIsNone(self.ok("/me", cookie=guest)["household_id"])
+
+    def test_client_throttle_applies_across_names(self):
+        import time
+        with transaction(write=True) as db:
+            db.execute("INSERT OR REPLACE INTO login_attempts VALUES(?,?,?)",
+                       ("client:127.0.0.1", int(time.time()), 49))
+        try:
+            for name, expected in [("absent_one",401), ("absent_two",429)]:
+                code, _, _ = self.call("/auth/login", "POST", data={"username":name, "password":"wrong-password"})
+                self.assertEqual(code, expected)
+        finally:
+            with transaction(write=True) as db:
+                db.execute("DELETE FROM login_attempts WHERE bucket='client:127.0.0.1'")
 
     def test_expired_session_and_duplicate_user(self):
         cookie = self.account("owner")

@@ -11,5 +11,6 @@ Schema 1 nằm trong [migration SQL](../migrations/001_foundation.sql). Khi kh�
 | invitations | Thuộc một hộ, lưu hash mã mời, thời điểm hết hạn, trạng thái thu hồi và tài khoản đã dùng. Mã gốc trả về một lần khi tạo |
 | audit_events | Hộ, tác nhân, hành động, đối tượng, thời điểm UTC dạng Unix, lý do và kết quả của biến động đã commit. Với hành động invite/join/revoke_invite, target_id là ID lời mời. Với hành động thành viên, đó là ID tài khoản |
 | invite_attempts | Số lần thử mã sai của tài khoản trong cửa sổ 5 phút |
+| login_attempts | [Migration 002](../migrations/002_login_attempts.sql) bổ sung giới hạn đăng nhập cho DB hiện có. Cửa sổ 5 phút có tối đa 10 lượt lỗi/đang xử lý theo tên chuẩn hóa và 50 theo địa chỉ client. Lượt thành công trả lại suất. HTTP 429 kèm Retry-After |
 
 SQLite được chọn cho W1 local. `BEGIN IMMEDIATE` tuần tự hóa các lệnh ghi trước khi kiểm tra quyền hiện hành, tiêu thụ mã và chuyển chủ. Khóa ngoại hoãn đến commit cho phép tạo hộ và membership Owner trong cùng giao dịch. Nếu một bước lỗi, cả giao dịch được hoàn tác. SQLite chỉ có một writer tại một thời điểm. Đánh giá lại PostgreSQL cho môi trường nhiều tiến trình hoặc staging trước W2.

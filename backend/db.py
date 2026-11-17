@@ -24,20 +24,20 @@ def transaction(write=False):
 def migrate():
     with transaction(write=True) as conn:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version == 1:
-            return
-        if version != 0:
+        migrations = ["001_foundation.sql", "002_login_attempts.sql"]
+        if not 0 <= version <= len(migrations):
             raise RuntimeError(f"Phiên bản schema chưa được hỗ trợ: {version}")
-        script = (ROOT / "migrations" / "001_foundation.sql").read_text(encoding="utf-8")
-        statement = ""
-        for line in script.splitlines(keepends=True):
-            statement += line
-            if sqlite3.complete_statement(statement):
-                conn.execute(statement)
-                statement = ""
-        if statement.strip():
-            raise RuntimeError("Migration chưa hoàn chỉnh")
-        conn.execute("PRAGMA user_version = 1")
+        for number, filename in enumerate(migrations[version:], start=version + 1):
+            script = (ROOT / "migrations" / filename).read_text(encoding="utf-8")
+            statement = ""
+            for line in script.splitlines(keepends=True):
+                statement += line
+                if sqlite3.complete_statement(statement):
+                    conn.execute(statement)
+                    statement = ""
+            if statement.strip():
+                raise RuntimeError("Migration chưa hoàn chỉnh")
+            conn.execute(f"PRAGMA user_version = {number}")
 
 
 if __name__ == "__main__":

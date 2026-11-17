@@ -63,8 +63,8 @@ def create(data: NewHousehold, request: Request):
 
 @router.post("/join")
 def join(data: JoinCode, request: Request):
-    now = int(time.time())
     with transaction(write=True) as conn:
+        now = int(time.time())
         uid = current_user(conn, request)["id"]
         require_no_household(conn, uid)
         attempts = conn.execute("SELECT * FROM invite_attempts WHERE user_id=?", (uid,)).fetchone()
@@ -87,18 +87,33 @@ def join(data: JoinCode, request: Request):
     raise HTTPException(400, "Mã mời sai, đã dùng, hết hạn hoặc đã bị thu hồi.")
 
 
+@router.get("/current")
+def current_household(request: Request):
+    """Return identity, role and visible household data from the same read transaction."""
+    with transaction() as conn:
+        user = current_user(conn, request)
+        home = conn.execute("SELECT h.* FROM households h JOIN memberships m ON m.household_id=h.id "
+                            "WHERE m.user_id=?", (user["id"],)).fetchone()
+        return {"user": dict(user), "household": describe(conn, home, user["id"]) if home else None}
+
+
+def describe(conn, home, uid):
+    hid = home["id"]
+    members = conn.execute("SELECT u.id,u.username FROM users u JOIN memberships m ON m.user_id=u.id "
+                           "WHERE m.household_id=? ORDER BY u.username", (hid,)).fetchall()
+    result = {**dict(home), "members": [dict(m) for m in members]}
+    if uid == home["owner_id"]:
+        rows = conn.execute("SELECT id,expires_at FROM invitations WHERE household_id=? AND used_by IS NULL "
+                            "AND revoked=0 AND expires_at>? ORDER BY id DESC", (hid, int(time.time())))
+        result["invitations"] = [dict(row) for row in rows]
+    return result
+
+
 @router.get("/{hid}")
 def details(hid: ResourceID, request: Request):
     with transaction() as conn:
         uid, home = authorize(conn, request, hid)
-        members = conn.execute("SELECT u.id,u.username FROM users u JOIN memberships m ON m.user_id=u.id "
-                               "WHERE m.household_id=? ORDER BY u.username", (hid,)).fetchall()
-        result = {**dict(home), "members": [dict(m) for m in members]}
-        if uid == home["owner_id"]:
-            rows = conn.execute("SELECT id,expires_at FROM invitations WHERE household_id=? AND used_by IS NULL "
-                                "AND revoked=0 AND expires_at>? ORDER BY id DESC", (hid, int(time.time())))
-            result["invitations"] = [dict(row) for row in rows]
-        return result
+        return describe(conn, home, uid)
 
 
 @router.post("/{hid}/invitations", status_code=201)

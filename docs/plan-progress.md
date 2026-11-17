@@ -3,7 +3,7 @@
 | Bước | Hiện vật |
 |---|---|
 | W1-01 | Khởi động local, trang kiểm tra và GET /api/health |
-| W1-02 | Schema 1, migration nguyên tử, quy tắc một hộ chính và đúng một Owner |
+| W1-02 | Schema 2, migration từ DB trống hoặc phiên bản 1, một hộ chính và đúng một Owner |
 | W1-03 | Đăng ký, đăng nhập, phiên cookie có thể thu hồi, đăng xuất |
 | W1-04 | Tạo hộ, danh sách thành viên, phân tách dữ liệu theo membership hiện hành |
 | W1-05 | Tạo, dùng, thu hồi và hết hạn mã mời 24 giờ, một lượt |

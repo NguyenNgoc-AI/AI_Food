@@ -19,7 +19,7 @@ Mở PowerShell tại thư mục chứa tệp này. Dùng Python 3.14 trên Wind
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
 ```
 
 Nếu lệnh `python` mở Microsoft Store, dùng `py -3.14 -m venv .venv` hoặc gọi trực tiếp đường dẫn đến Python 3.14 đã cài ở bước đầu.

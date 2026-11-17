@@ -4,6 +4,9 @@ const el = id => document.getElementById(id);
 let user = null;
 let group = null;
 let registering = false;
+let generation = 0;
+let lastIdentity = null;
+const sessionChanges = new BroadcastChannel("smartfood-session");
 
 function notice(message, error = false) {
   el("notice").textContent = message;
@@ -11,9 +14,11 @@ function notice(message, error = false) {
 }
 
 async function api(path, method = "GET", body) {
+  const headers = {"Content-Type": "application/json", "X-SmartFood": "1"};
+  if (user && method !== "GET") headers["X-SmartFood-Actor"] = String(user.id);
   const response = await fetch("/api" + path, {
     method, cache: "no-store",
-    headers: {"Content-Type": "application/json", "X-SmartFood": "1"},
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const data = await response.json();
@@ -26,7 +31,7 @@ async function api(path, method = "GET", body) {
 }
 
 function show(id) {
-  for (const key of ["account", "onboard", "home"]) el(key).hidden = key !== id;
+  for (const key of ["account", "onboard", "home", "unavailable"]) el(key).hidden = key !== id;
   if (id !== "home") {
     group = null;
     resetCode();
@@ -96,23 +101,49 @@ function renderGroup() {
   show("home");
 }
 
+function clearDrafts() {
+  for (const id of ["auth-form", "join-form", "create-form"]) el(id).reset();
+  mode(false);
+}
+
+function invalidate() {
+  generation++;
+  user = null;
+  show(null);
+  notice("");
+}
+
 async function refresh() {
-  resetCode();
-  group = null;
+  invalidate();
+  const version = generation;
   try {
-    user = await api("/me");
+    const snapshot = await api("/households/current");
+    if (version !== generation) return false;
+    if (snapshot.user.id !== lastIdentity) clearDrafts();
+    user = snapshot.user;
+    lastIdentity = user.id;
+    group = snapshot.household;
+    if (group) renderGroup();
+    else show("onboard");
+    return true;
   } catch (error) {
-    if (error.status !== 401) throw error;
-    user = null;
-    show("account");
-    return;
+    if (version !== generation) return false;
+    if (error.status === 401) {
+      if (lastIdentity !== null) clearDrafts();
+      lastIdentity = null;
+      show("account");
+    } else {
+      show("unavailable");
+      notice("Không xác minh được phiên. Hãy thử lại.", true);
+    }
+    return false;
   }
-  if (!user.household_id) {
-    show("onboard");
-    return;
-  }
-  group = await api("/households/" + user.household_id);
-  renderGroup();
+}
+
+function sessionChanged() {
+  clearDrafts();
+  sessionChanges.postMessage("changed");
+  return refresh();
 }
 
 async function run(control, action) {
@@ -122,7 +153,7 @@ async function run(control, action) {
     await action();
   } catch (error) {
     if ([401, 403, 404, 409].includes(error.status)) {
-      try { await refresh(); } catch { show(user ? "onboard" : "account"); }
+      await refresh();
     }
     notice(error.status ? error.message : "Không kết nối được dịch vụ. Hãy thử lại.", true);
   } finally {
@@ -148,8 +179,7 @@ for (const [id, submit] of [
       notice("Đã tạo tài khoản. Hãy đăng nhập.");
     } else {
       await api("/auth/login", "POST", data);
-      el("auth-form").reset();
-      await refresh();
+      await sessionChanged();
     }
   }],
   ["create-form", async data => { await api("/households", "POST", data); await refresh(); }],
@@ -163,15 +193,14 @@ for (const [id, submit] of [
 }
 el("logout").onclick = () => run(el("logout"), async () => {
   await api("/auth/logout", "POST");
-  el("create-form").reset();
-  el("join-form").reset();
-  await refresh();
+  await sessionChanged();
 });
 el("refresh").onclick = () => run(el("refresh"), refresh);
 el("issue").onclick = () => run(el("issue"), async () => {
-  const result = await api("/households/" + group.id + "/invitations", "POST");
-  await refresh();
-  if (group?.owner_id === user?.id) {
+  const actor = user.id, household = group.id, version = generation;
+  const result = await api("/households/" + household + "/invitations", "POST");
+  if (version !== generation) return;
+  if (await refresh() && user?.id === actor && group?.id === household && group.owner_id === actor) {
     el("code").value = result.code;
     el("new-code").hidden = false;
   }
@@ -182,7 +211,12 @@ el("leave").onclick = () => run(el("leave"), async () => {
   await refresh();
   notice("Đã rời hộ.");
 });
-window.addEventListener("pageshow", event => {
-  if (event.persisted) run(el("refresh"), refresh);
+el("retry-session").onclick = refresh;
+sessionChanges.onmessage = () => { clearDrafts(); refresh(); };
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) invalidate();
+  else refresh();
 });
-run(el("refresh"), refresh);
+window.addEventListener("focus", refresh);
+window.addEventListener("pageshow", event => { if (event.persisted) refresh(); });
+refresh();

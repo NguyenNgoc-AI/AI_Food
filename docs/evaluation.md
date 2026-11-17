@@ -8,6 +8,8 @@ Chạy từ gốc repo, trên môi trường đã cài requirements. Các test t
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p browser_g1.py -v
 ```
 
-Ca trình duyệt dùng Google Chrome đã cài và Playwright. Tám test API/DB gồm đăng ký và phiên, bảo vệ yêu cầu sửa dữ liệu, schema và rollback, từ chối truy cập chéo hộ, thu hồi quyền, chuyển chủ và audit, giới hạn mã mời, cạnh tranh dùng mã và cạnh tranh chuyển chủ. Test Chrome dùng ba phiên riêng và hai hộ, ở viewport rộng 390 px. Kiểm tra trang kết nối độc lập theo [README](../README.md).
+Ca trình duyệt dùng Google Chrome đã cài và Playwright. Các test API/DB gồm đăng ký và phiên, bảo vệ yêu cầu sửa dữ liệu, schema và rollback, từ chối truy cập chéo hộ, thu hồi quyền, chuyển chủ và audit, giới hạn mã mời, cạnh tranh dùng mã và cạnh tranh chuyển chủ. Test Chrome dùng ba phiên riêng và hai hộ, ở viewport rộng 390 px. Kiểm tra trang kết nối độc lập theo [README](../README.md).
 
 Các ca tương ứng TC-AUTH-01 là truy cập hộ khác, TC-AUTH-02 là truy cập sau khi bị xóa membership, TC-OWNER-01 là chuyển Owner, thay quyền và ghi audit. Các phép đo OCR, gợi ý món và mô phỏng lãng phí thuộc các mốc sau.
+
+Sau review W1, bộ hồi quy bao gồm nâng cấp DB v1, giới hạn đăng nhập theo tên và client, hết hạn mã khi chờ khóa ghi, hai tab chung cookie, phản hồi cũ đến sau phản hồi mới và lỗi mạng khi xác minh danh tính. Khi mất kết nối, trang phải xóa tên hộ và danh sách thành viên, rồi cho phép thử lại.

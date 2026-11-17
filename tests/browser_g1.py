@@ -5,6 +5,64 @@ from live_server import LiveServer
 
 
 class BrowserG1(LiveServer):
+    def test_shared_cookie_and_delayed_refresh(self):
+        with sync_playwright() as engine:
+            browser = engine.chromium.launch(channel="chrome", headless=True)
+            try:
+                ctx = browser.new_context()
+                def post(path, data):
+                    res = ctx.request.post(self.url + "/api" + path, data=data, headers={"X-SmartFood":"1"})
+                    self.assertTrue(res.ok, res.status)
+                accounts = {}
+                for name in ("switch_b", "switch_a"):
+                    accounts[name] = {"username":name, "password":"browser-test-only"}
+                    post("/auth/register", accounts[name])
+                    post("/auth/login", accounts[name])
+                    post("/households", {"name":"House " + name})
+                old, active = ctx.new_page(), ctx.new_page()
+                for page in (old, active):
+                    page.goto(self.url + "/household")
+                    expect(page.locator("#home-name")).to_have_text("House switch_a")
+                old.evaluate("""() => {
+                    const fetchNow = window.fetch.bind(window);
+                    let delay = true;
+                    window.fetch = async (...args) => {
+                        const response = await fetchNow(...args);
+                        if (delay && args[0] === '/api/households/current') {
+                            delay = false;
+                            await new Promise(done => { window.releaseOld = done; });
+                        }
+                        return response;
+                    };
+                    window.pendingRefresh = refresh();
+                }""")
+                old.wait_for_function("typeof window.releaseOld === 'function'")
+                active.locator("#logout").click()
+                expect(old.locator("#account")).to_be_visible()
+                active.get_by_label("Tên đăng nhập").fill("switch_b")
+                active.get_by_label("Mật khẩu").fill(accounts["switch_b"]["password"])
+                active.locator("#auth-submit").click()
+                expect(old.locator("#home-name")).to_have_text("House switch_b")
+                old.evaluate("window.releaseOld(); window.pendingRefresh")
+                expect(old.locator("#home-name")).to_have_text("House switch_b")
+                expect(old.locator("#username")).to_have_text("switch_b")
+                old.route("**/api/households/current", lambda route: route.abort())
+                old.locator("#refresh").click()
+                expect(old.locator("#unavailable")).to_be_visible()
+                expect(old.locator("#home-name")).to_be_empty()
+                expect(old.locator("#members li")).to_have_count(0)
+                old.unroute("**/api/households/current")
+                old.locator("#retry-session").click()
+                expect(old.locator("#home-name")).to_have_text("House switch_b")
+                post("/auth/login", accounts["switch_a"])
+                mismatch = ctx.request.post(self.url + "/api/auth/logout",
+                    headers={"X-SmartFood":"1","X-SmartFood-Actor":str(old.evaluate("user.id"))})
+                self.assertEqual(mismatch.status, 409)
+                old.evaluate("window.dispatchEvent(new Event('focus'))")
+                expect(old.locator("#home-name")).to_have_text("House switch_a")
+            finally:
+                browser.close()
+
     def test_household_lifecycle(self):
         with sync_playwright() as engine:
             browser = engine.chromium.launch(channel="chrome", headless=True)

@@ -13,6 +13,7 @@ from .db import transaction
 router = APIRouter(prefix="/api")
 COOKIE = "smartfood_session"
 SESSION_SECONDS = 7 * 86400
+LOGIN_WINDOW = 300
 
 
 class Credentials(BaseModel):
@@ -44,6 +45,9 @@ def current_user(conn, request):
     ).fetchone()
     if not row:
         raise HTTPException(401, "Vui lòng đăng nhập.")
+    expected_actor = request.headers.get("X-SmartFood-Actor")
+    if expected_actor is not None and expected_actor != str(row["id"]):
+        raise HTTPException(409, "Tài khoản đã thay đổi. Hãy kiểm tra lại thao tác.")
     return row
 
 
@@ -61,14 +65,29 @@ def register(data: Credentials):
 
 @router.post("/auth/login")
 def login(data: Credentials, request: Request, response: Response):
-    with transaction() as conn:
+    buckets = {f"user:{data.username}": 10, f"client:{request.client.host}": 50}
+    reservations = {}
+    with transaction(write=True) as conn:
+        now = int(time.time())
+        conn.execute("DELETE FROM login_attempts WHERE started<=?", (now - LOGIN_WINDOW,))
+        for key, limit in buckets.items():
+            row = conn.execute("SELECT started, attempts FROM login_attempts WHERE bucket=?", (key,)).fetchone()
+            if row and row["attempts"] >= limit:
+                wait = row["started"] + LOGIN_WINDOW - now
+                raise HTTPException(429, "Đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau.",
+                                    headers={"Retry-After": str(wait)})
+            reservations[key] = row["started"] if row else now
+            conn.execute("INSERT INTO login_attempts VALUES (?,?,1) ON CONFLICT(bucket) "
+                         "DO UPDATE SET attempts=attempts+1", (key, now))
         user = conn.execute("SELECT * FROM users WHERE username=?", (data.username,)).fetchone()
     salt, expected = user["password_hash"].split(":") if user else ("00" * 16, "00" * 64)
     if not hmac.compare_digest(derive(data.password, bytes.fromhex(salt)), expected) or not user:
         raise HTTPException(401, "Tên đăng nhập hoặc mật khẩu không đúng.")
     token = secrets.token_urlsafe(32)
-    now = int(time.time())
     with transaction(write=True) as conn:
+        now = int(time.time())
+        conn.executemany("UPDATE login_attempts SET attempts=attempts-1 WHERE bucket=? AND started=?",
+                         reservations.items())
         conn.execute("DELETE FROM sessions WHERE expires_at<=? OR token_hash=?",
                      (now, digest(request.cookies.get(COOKIE, ""))))
         conn.execute("INSERT INTO sessions VALUES (?,?,?)", (digest(token), user["id"], now + SESSION_SECONDS))
@@ -80,6 +99,8 @@ def login(data: Credentials, request: Request, response: Response):
 @router.post("/auth/logout")
 def logout(request: Request, response: Response):
     with transaction(write=True) as conn:
+        if "X-SmartFood-Actor" in request.headers:
+            current_user(conn, request)
         conn.execute("DELETE FROM sessions WHERE token_hash=?", (digest(request.cookies.get(COOKIE, "")),))
     response.delete_cookie(COOKIE, httponly=True, samesite="strict")
     return {"ok": True}
