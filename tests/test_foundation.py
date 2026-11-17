@@ -158,6 +158,68 @@ class Foundation(LiveServer):
             with transaction(write=True) as db:
                 db.execute("DELETE FROM login_attempts WHERE bucket='client:127.0.0.1'")
 
+    def ordered_writes(self, first, second):
+        locked, contender = threading.Event(), threading.Event()
+        @contextmanager
+        def observed(write=False):
+            if locked.is_set():
+                contender.set()
+            with transaction(write=write) as db:
+                if not locked.is_set():
+                    locked.set()
+                    self.assertTrue(contender.wait(5))
+                yield db
+        with patch("backend.households.transaction", observed), ThreadPoolExecutor(2) as pool:
+            one = pool.submit(first)
+            self.assertTrue(locked.wait(5))
+            two = pool.submit(second)
+            return one.result()[0], two.result()[0]
+
+    def test_revoke_join_orderings(self):
+        owner, guest = self.account("owner"), self.account("guest")
+        home = self.home(owner)
+        for revoke_first in (True, False):
+            invite = self.invite(home, owner)
+            def revoke():
+                return self.call(home+"/invitations/"+str(invite["id"]), "DELETE", owner)
+            def join():
+                return self.call("/households/join", "POST", guest, {"code":invite["code"]})
+            if revoke_first:
+                self.assertEqual(self.ordered_writes(revoke, join), (200,400))
+                self.assertIsNone(self.ok("/me", cookie=guest)["household_id"])
+            else:
+                self.assertEqual(self.ordered_writes(join, revoke), (200,404))
+                self.assertEqual(len(self.ok(home,cookie=owner)["members"]), 2)
+
+    def test_transfer_remove_orderings(self):
+        owner, member = self.account("owner"), self.account("member")
+        home = self.home(owner)
+        for remove_first in (True, False):
+            uid = self.enroll(home, owner, member)
+            def transfer():
+                return self.call(home+"/owner/"+str(uid), "POST", owner)
+            def remove():
+                return self.call(home+"/members/"+str(uid), "DELETE", owner)
+            if remove_first:
+                self.assertEqual(self.ordered_writes(remove, transfer), (200,404))
+                self.assertIsNone(self.ok("/me", cookie=member)["household_id"])
+            else:
+                self.assertEqual(self.ordered_writes(transfer, remove), (200,409))
+                self.assertEqual(self.ok(home,cookie=member)["owner_id"], uid)
+
+    def test_transfer_rolls_back_if_audit_fails(self):
+        from backend import households
+        from starlette.requests import Request as ServerRequest
+        owner, member = self.account("owner"), self.account("member")
+        home = self.home(owner)
+        uid = self.enroll(home,owner,member)
+        before = self.ok(home,cookie=owner)
+        req = ServerRequest({"type":"http", "headers":[(b"cookie",owner.encode())]})
+        with patch.object(households,"audit",side_effect=RuntimeError("audit fixture")):
+            with self.assertRaisesRegex(RuntimeError,"audit fixture"):
+                households.transfer(before["id"],uid,req)
+        self.assertEqual(self.ok(home,cookie=owner),before)
+
     def test_expired_session_and_duplicate_user(self):
         cookie = self.account("owner")
         me = self.ok("/me", cookie=cookie)
