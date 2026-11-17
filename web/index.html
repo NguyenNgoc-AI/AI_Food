@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kết nối API · SmartFood AI</title>
+  <style>
+    :root { font-family: Inter, "Segoe UI", sans-serif; color: #162d26; background: #f5f7f2; }
+    body { margin: 0; }
+    main { max-width: 32rem; margin: 12vh auto; padding: 1.5rem; }
+    header { font-weight: 650; color: #39604f; }
+    h1 { font-size: clamp(2rem, 7vw, 3rem); line-height: 1.1; margin: 2.5rem 0 1.25rem; }
+    section { background: white; border: 1px solid #cbd7cd; border-radius: .7rem; padding: 1.25rem; }
+    p { margin: 0 0 1.1rem; }
+    button { background: #205442; color: white; font: inherit; font-weight: 600; border: 0; border-radius: .4rem; padding: .7rem 1rem; cursor: pointer; }
+    button:disabled { opacity: .65; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>SmartFood AI</header>
+    <h1>Kết nối API</h1>
+    <section aria-label="Trạng thái kết nối">
+      <p role="status" id="status">Đang kiểm tra…</p>
+      <button type="button" id="retry">Thử lại</button>
+    </section>
+  </main>
+  <script>
+    const statusText = document.getElementById("status");
+    const retry = document.getElementById("retry");
+
+    async function checkConnection() {
+      retry.disabled = true;
+      statusText.textContent = "Đang kiểm tra…";
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      try {
+        const response = await fetch("/api/health", {
+          cache: "no-store", signal: controller.signal
+        });
+        if (!response.ok || (await response.json())?.status !== "ok") {
+          throw new Error("Phản hồi API không hợp lệ");
+        }
+        statusText.textContent = "Đã kết nối API";
+      } catch {
+        statusText.textContent = "Chưa kết nối được API";
+      } finally {
+        clearTimeout(timer);
+        retry.disabled = false;
+      }
+    }
+
+    retry.addEventListener("click", checkConnection);
+    checkConnection();
+  </script>
+</body>
+</html>
